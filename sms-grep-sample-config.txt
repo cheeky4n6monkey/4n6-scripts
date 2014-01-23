@@ -1,0 +1,31 @@
+# Config file for Android sms schema
+# Format is: 
+# Fieldname:Type:Print 
+# Print can be 0 (don't print) or 1 (print this field)
+# Type can be DATE, INTEGER, TEXT, BLOB
+# ie same as SQLite schema (except for DATE)
+# Fieldname should probably use the SQLite fieldname to avoid confusion.
+# Use DATE to denote 6 byte fields representing a Unix epoch time value
+# DATE will interpreted as ms since Unix epoch if c4n6type=Android
+# DATE will interpreted as seconds since Unix epoch if c4n6type=iPhone
+# The first DATE field will be used to chronologically print sms.
+
+c4n6type=android
+
+_id:INTEGER:0
+thread_id:INTEGER:0
+address:TEXT:1
+person:INTEGER:0
+date:DATE:1
+protocol:INTEGER:0
+read:INTEGER:1
+status:INTEGER:0
+type:INTEGER:1
+reply_path_present:INTEGER:0
+subject:TEXT:1
+body:TEXT:1
+service_center:TEXT:0
+locked:INTEGER:0
+error_code:INTEGER:0
+seen:INTEGER:1
+date_sent:DATE:1
