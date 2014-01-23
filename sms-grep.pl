@@ -680,4 +680,3 @@ sub calculate_varint_bytes_from_lsb {
 	}
 	return $numbytes;
 }
-
