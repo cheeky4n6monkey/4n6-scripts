@@ -1,0 +1,68 @@
+# "dextract.py" Template Definition File
+# Author: cheek4n6monkey@gmail.com
+#
+# Note: ">" before type means use Big Endian interpretation for that type (eg >unix32)
+# Note: "<" before type means use Little Endian interpretation
+# Possible types are:
+#
+# Number types:
+# ==============
+# x (Ignore these No. of bytes)
+# b or B (signed or unsigned byte)
+# h or H (BE/LE signed or unsigned 16 bit short integer)
+# i or I (BE/LE signed or unsigned 32 bit integer)
+# l or L (BE/LE signed or unsigned 32 bit long)
+# q or Q (BE/LE signed or unsigned 64 bit long long)
+# f (BE/LE 32 bit float)
+# d (BE/LE 64 bit double float)
+#
+# String types:
+# ==============
+# c (ascii string of length 1)
+# s (ascii string) 
+# Note: "s" types will have length defined in "num_types" column. This length can be:
+# - a number (eg 140)
+# - 0 (will extract string until first '\x00') 
+# - Deferred. Deferred string lengths must be set to a previously declared field_name 
+# See "msgsize" in following example:
+# msg-null-termd | 0 | s
+# msg-fixed-size | 140 | s
+# msgsize | 1 | B
+# msg-deferred | msgsize | s
+# msg-to-ignore | msgsize | x
+#
+# Also supported are:
+# UTF16BE (BE 2 byte string)
+# UTF16LE (LE 2 byte string)
+# For example:
+# UTF16BE-msg-null-termd | 0 | UTF16BE
+# UTF16BE-msg-fixed-size | 140 | UTF16BE
+# UTF16BE-msgsize | 1 | B
+# UTF16BE-msg-deferred | msgsize | UTF16BE
+#
+# Timestamp types:
+# =================
+# unix32 (BE/LE No. of secs since 1JAN1970T00:00:00 stored in 32 bits)
+# unix48ms (BE/LE No. of millisecs since 1JAN1970T00:00:00 stored in 48 bits)
+# hfs32 (BE/LE No. of secs since 1JAN1904T00:00:00)
+# osx32 (BE/LE No. of secs since 1JAN2001T00:00:00)
+# aol32 (BE/LE No. of secs since 1JAN1980T00:00:00)
+# gps32 (BE/LE No. of secs since 6JAN1980T00:00:00)
+# unix10digdec (BE only 10 digit (5 byte) decimal No. of secs since 1JAN1970T00:00:00)
+# unix13digdec (BE only 13 digit (7 byte) decimal No. of ms since 1JAN1970T00:00:00)
+# bcd12 (BE only 6 byte datetime hex string  eg 071231125423 = 31DEC2007T12:54:23)
+# bcd14 (BE only 7 byte datetime hex string eg 20071231125423 = 31DEC2007T12:54:23)
+# dosdate_default (BE/LE 4 byte int eg BE 0x3561A436 = LE 0x36A46135 = 04MAY2007T12:09:42)
+# dosdate_wordswapped (BE/LE 4 byte int eg BE 0xA4363561 = LE 0x613536A4 = 04MAY2007T12:09:42)
+#
+# Note: Columns MUST be seperated by " | " (spaces included)
+# field_name | num_types | type
+contactname | 0 | s
+phone | 7 | s
+msgsize | 1 | B
+msg | msgsize | s
+readflag | 1 | x
+timestamp | 1 | >unix32
+
+
+
