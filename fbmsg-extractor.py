@@ -18,6 +18,7 @@
 #
 # Version History:
 # v2014-01-08 Initial Version
+# v2014-02-02 Removed debugging print exit statement (oops!)
 
 # Instructions:
 # (Mandatory) Use the -t argument to specify the threads_db2 SQLite database
@@ -42,12 +43,7 @@ import json
 import datetime
 import urllib
 
-#import traceback
-#traceback.print_exc()
-#import pprint
-#pp = pprint.PrettyPrinter()
-
-version_string = "fbmsg-extractor v2014-01-08 Initial Version"
+version_string = "fbmsg-extractor v2014-02-02"
 print "Running " + version_string
 
 usage = "Usage: %prog -t threads_db -c contacts_db -x contacts.tsv -z messages.tsv"
@@ -262,11 +258,6 @@ while row:
             print row[MESGS_QUERY_COORDS_COL_IDX]
     #endif coords    
 
-
-    if (row[MESGS_QUERY_MSG_ID_COL_IDX] is "m_mid.1370430075178:5259db53cf1f0ea140"):
-         print row[MESGS_QUERY_TEXT_COL_IDX]
-         exit()
-         
     if (row[MESGS_QUERY_TEXT_COL_IDX] is not None):
         textstr = row[MESGS_QUERY_TEXT_COL_IDX] # message text
         textstr = textstr.replace("\r\n", " ") # change any newlines to spaces
