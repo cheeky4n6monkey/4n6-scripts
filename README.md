@@ -6,7 +6,7 @@ Forensic Scripts
 Currently this project contains assorted Perl/Python scripts from http://cheeky4n6monkey.blogspot.com/
 
 The scripts are mainly written for/tested on SANS SIFT Virtual Machines. MOST Perl scripts should also run with ActiveState Perl on Windows but ALL have been tested/run on SANS SIFT (v2). 
-Python Scripts have been developed/tested on SANS SIFT (v2) and/or Windows 7.
+Python Scripts have been developed/tested on Ubuntu and/or Windows 7.
 
 Copyright (C) 2012, 2013, 2014, 2015 Adrian Leong (cheeky4n6monkey at gmail dot com)
 
