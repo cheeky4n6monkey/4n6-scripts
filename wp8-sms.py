@@ -98,6 +98,10 @@ Previously, it was returning an empty string. This was done to handle emoticons 
 v2014-10-05:
 - Renamed script from "win8sms-ex2.py" to "wp8-sms.py"
 
+v2015-07-10:
+- Changed script to search for hex strings in chunks of CHUNK_SIZE rather than in one big read 
+(makes it quicker when running against whole .bin files). Thanks to Boss Rob :)
+
 """
 
 import codecs
@@ -106,8 +110,12 @@ import struct
 import datetime
 import string
 from optparse import OptionParser
+import re
+import os
 
-version_string = "wp8-sms.py v2014-10-05"
+version_string = "wp8-sms.py v2015-07-10"
+CHUNK_SIZE = 2000000000 # max value of CHUNK_SIZE + DELTA is 2147483647 (C long limit with Python 2)
+DELTA = 1000 # read this extra bit to catch any hits crossing chunk boundaries. Should be AT LEAST max size of record being searched for.
 
 # Read in unicode chars one at a time until a null char ie "0x00 0x00"
 # Returns empty string on error otherwise it filters out return/newlines and returns the string read
@@ -169,14 +177,23 @@ def read_filetime(f):
     unixtime = (mstime - 116444736000000000) // 10000000
     return unixtime
 
-# Find all indices of a substring in a given string (Python recipe) 
+# DEPRACATED: Find all indices of a substring in a given string (Python recipe) 
 # From http://code.activestate.com/recipes/499314-find-all-indices-of-a-substring-in-a-given-string/
-def all_indices(bigstring, substring, listindex=[], offset=0):
-    i = bigstring.find(substring, offset)
-    while i >= 0:
-        listindex.append(i)
-        i = bigstring.find(substring, i + 1)
+#def all_indices(bigstring, substring, listindex=[], offset=0):
+#    i = bigstring.find(substring, offset)
+#    while i >= 0:
+#        listindex.append(i)
+#        i = bigstring.find(substring, i + 1)
+#
+#    return listindex
 
+# Find all indices of the "pattern" regular expression in a given string (using regex)
+# Where pattern is a compiled Python re pattern object (ie the output of "re.compile")
+def regsearch(bigstring, pattern, listindex=[]):
+    hitsit = pattern.finditer(bigstring)
+    for it in hitsit:
+        # iterators only last for one shot so we capture the offsets to a list
+        listindex.append(it.start())
     return listindex
 
 # Given a file ptr to "SMStext" field, looks for the 3rd last "PHONE0" digit value
@@ -224,6 +241,48 @@ def goto_next_field(f, offset, maxbytes):
             return True
     return False
 
+# Searches chunks of a file (using RE) and returns file offsets of any hits.
+# Intended for searching of large files where we cant read the whole thing into memory
+# This function calls the "regsearch" search method
+def sliceNsearchRE(fd, chunksize, delta, term):
+    final_hitlist = [] # list of file offsets which contain the search term
+    pattern = re.compile(term, re.DOTALL) # should only really call this once at start, if same substring.
+    stats = os.fstat(fd.fileno())
+    #print("sliceNsearchRE Input file " + filename + " is " + str(stats.st_size) + " bytes\n")
+    begin_chunk = 0
+
+    # Handle if filesize is less than CHUNK_SIZE (eg store.vol instead of image.bin)
+    # Should be able to read whole file in 1 chunk 
+    if (chunksize >= stats.st_size):
+        fd.seek(begin_chunk)
+        raw = fd.read()
+        final_hitlist = regsearch(raw, pattern, [])
+        #print(str(len(final_hitlist)) + " hits found in 1 chunk for " + str(term))
+    else:
+        # Filesize is greater than 1 chunk, need to loop thru
+        while ((begin_chunk + chunksize) <= stats.st_size) :
+            chunk_size_to_read = chunksize + delta
+            if ((chunk_size_to_read + begin_chunk) > stats.st_size):
+                chunk_size_to_read = stats.st_size - begin_chunk
+            #print("seeking " + str(begin_chunk) + " with size = " + str(chunk_size_to_read))
+            fd.seek(begin_chunk)
+            rawchunk = fd.read(chunk_size_to_read)
+            subhits = regsearch(rawchunk, pattern, [])
+            #print(str(len(subhits)) + " hits found at " + str(subhits))
+            # Items in subhits will be offsets relative to the start of the rawchunk (not relative to the file)
+            # Need to adjust offsets ...
+            for hit in subhits :
+                if (hit < chunksize) :
+                    final_hitlist.append(begin_chunk + hit)
+                    #print("adding " + str(begin_chunk + hit) + " to list")
+                elif (hit >= chunksize) :
+                    #print("ignoring " + str(begin_chunk + hit) + " to list")
+                    break # don't care if we get here because hit should be processed in next chunk
+                    # subhits can start at index 0 so possible hit offsets are 0 to chunksize-1 inclusive
+            begin_chunk += chunksize
+    #print("final_hitlist = " + str(final_hitlist))
+    return(final_hitlist)
+
 # Main
 print "Running " + version_string + "\n"
 
@@ -267,16 +326,16 @@ except:
     exit(-1)
 
 # read file into one big BINARY string
-filestring = fb.read()
-# search the big file string for the hex equivalent of "SMStext" which marks SMS Text content (ie Area 1)
+# search the file chunks for the hex equivalent of "SMStext" which marks SMS Text content (ie Area 1)
 substring1 = "\x53\x00\x4d\x00\x53\x00\x74\x00\x65\x00\x78\x00\x74\x00\x00\x00" #ie "SMStext"
-hits = all_indices(filestring, substring1, [])
+hits = sliceNsearchRE(fb, CHUNK_SIZE, DELTA, substring1)
 #print "SMStext hits = " + str(len(hits))
 
 # search for "SMS" which marks the SMS log entries (ie Area 2 times and phone number)
 # this will include SMStext hits so we need to some de-duping afterwards
 substring2 = "\x53\x00\x4d\x00\x53\x00\x00\x00" # ie "SMS"
-smshits = all_indices(filestring, substring2, [])
+smshits = sliceNsearchRE(fb, CHUNK_SIZE, DELTA, substring2)
+#smshits = all_indices(filestring, substring2, [])
 #print "SMS hits = " + str(len(smshits)) + " smshits"
 
 # Filter smshits further (the hits above will include some false positives eg "SMStext")
