@@ -10,7 +10,7 @@
 # WARNING: This program is provided "as-is" and has been tested on a limited set of data from a Nokia Lumia 520 Windows Phone 8
 # See http://cheeky4n6monkey.blogspot.com/ for further details.
 
-# Copyright (C) 2014 Adrian Leong (cheeky4n6monkey@gmail.com)
+# Copyright (C) 2014, 2015 Adrian Leong (cheeky4n6monkey@gmail.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -64,23 +64,28 @@
 # v2014-08-17 Initial version
 # v2014-08-21 Adjusted to extract last three Unicode fields only
 # v2014-10-05 Renamed script from "win8contacts.py" to "wp8-contacts.py"
+# v2015-07-12 Changed script to search for hex strings in chunks of CHUNK_SIZE rather than in one big read 
+#            (makes it quicker when running against whole .bin files). Thanks to Boss Rob :)
 
 import codecs
 import os
 import sys
 import string
 from optparse import OptionParser
+import re
+import os
 
-version_string = "wp8-contacts.py v2014-10-05"
+version_string = "wp8-contacts.py v2015-07-12"
+CHUNK_SIZE = 2000000000 # max value of CHUNK_SIZE + DELTA is 2147483647 (C long limit with Python 2)
+DELTA = 1000 # read this extra bit to catch any hits crossing chunk boundaries. Should be AT LEAST max size of record being searched for.
 
-# Find all indices of a substring in a given string (Python recipe) 
-# From http://code.activestate.com/recipes/499314-find-all-indices-of-a-substring-in-a-given-string/
-def all_indices(bigstring, substring, listindex=[], offset=0):
-    i = bigstring.find(substring, offset)
-    while i >= 0:
-        listindex.append(i)
-        i = bigstring.find(substring, i + 1)
-
+# Find all indices of the "pattern" regular expression in a given string (using regex)
+# Where pattern is a compiled Python re pattern object (ie the output of "re.compile")
+def regsearch(bigstring, pattern, listindex=[]):
+    hitsit = pattern.finditer(bigstring)
+    for it in hitsit:
+        # iterators only last for one shot so we capture the offsets to a list
+        listindex.append(it.start())
     return listindex
 
 # Extract a Unicode null terminated string given file pointer to terminating null character. 
@@ -118,6 +123,47 @@ def rev_extract_unistring(f):
     readstring = ''.join(readcharlist) # convert the list into a string
     return readstring
 
+# Searches chunks of a file (using RE) and returns file offsets of any hits.
+# Intended for searching of large files where we cant read the whole thing into memory
+# This function calls the "regsearch" search method
+def sliceNsearchRE(fd, chunksize, delta, term):
+    final_hitlist = [] # list of file offsets which contain the search term
+    pattern = re.compile(term, re.DOTALL) # should only really call this once at start, if same substring.
+    stats = os.fstat(fd.fileno())
+    #print("sliceNsearchRE Input file " + filename + " is " + str(stats.st_size) + " bytes\n")
+    begin_chunk = 0
+
+    # Handle if filesize is less than CHUNK_SIZE (eg store.vol instead of image.bin)
+    # Should be able to read whole file in 1 chunk 
+    if (chunksize >= stats.st_size):
+        fd.seek(begin_chunk)
+        raw = fd.read()
+        final_hitlist = regsearch(raw, pattern, [])
+        #print(str(len(final_hitlist)) + " hits found in 1 chunk for " + str(term))
+    else:
+        # Filesize is greater than 1 chunk, need to loop thru
+        while ((begin_chunk + chunksize) <= stats.st_size) :
+            chunk_size_to_read = chunksize + delta
+            if ((chunk_size_to_read + begin_chunk) > stats.st_size):
+                chunk_size_to_read = stats.st_size - begin_chunk
+            #print("seeking " + str(begin_chunk) + " with size = " + str(chunk_size_to_read))
+            fd.seek(begin_chunk)
+            rawchunk = fd.read(chunk_size_to_read)
+            subhits = regsearch(rawchunk, pattern, [])
+            #print(str(len(subhits)) + " hits found at " + str(subhits))
+            # Items in subhits will be offsets relative to the start of the rawchunk (not relative to the file)
+            # Need to adjust offsets ...
+            for hit in subhits :
+                if (hit < chunksize) :
+                    final_hitlist.append(begin_chunk + hit)
+                    #print("adding " + str(begin_chunk + hit) + " to list")
+                elif (hit >= chunksize) :
+                    #print("ignoring " + str(begin_chunk + hit) + " to list")
+                    break # don't care if we get here because hit should be processed in next chunk
+                    # subhits can start at index 0 so possible hit offsets are 0 to chunksize-1 inclusive
+            begin_chunk += chunksize
+    #print("final_hitlist = " + str(final_hitlist))
+    return(final_hitlist)
 
 # Main
 print "Running " + version_string + "\n"
@@ -160,13 +206,10 @@ except:
     print ("Input File Not Found (binary attempt)")
     exit(-1)
 
-# read file into one big BINARY string
-filestring = fb.read()
-# search the big file string for the
+# search the file chunk strings for the
 # [01 04 00 00 00 82 00 E0 00 74 C5 B7 10 1A 82 E0 08] value which appears at end of Contact records
 contact_sig = "\x01\x04\x00\x00\x00\x82\x00\xE0\x00\x74\xC5\xB7\x10\x1A\x82\xE0\x08"
-contact_hits = all_indices(filestring, contact_sig, [])
-
+contact_hits = sliceNsearchRE(fb, CHUNK_SIZE, DELTA, contact_sig)
 print "Found " + str(len(contact_hits)) + " potential contacts" 
 
 # Dict for storing results (keyed by offset)
