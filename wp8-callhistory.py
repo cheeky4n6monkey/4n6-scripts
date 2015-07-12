@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-# Python script to parse CallHistory from a Windows 8.0 phone's store.vol file
+# Python script to parse CallHistory from a Windows Phone 8.0 "Phone" file
 # Author: cheeky4n6monkey@gmail.com (Adrian Leong)
 # 
 # Special Thanks to Detective Cindy Murphy (@cindymurph) and the Madison, WI Police Department 
@@ -10,7 +10,7 @@
 # WARNING: This program is provided "as-is" and has been tested on a limited set of data from a Nokia Lumia 520 Windows Phone 8
 # See http://cheeky4n6monkey.blogspot.com/ for further details.
 
-# Copyright (C) 2014 Adrian Leong (cheeky4n6monkey@gmail.com)
+# Copyright (C) 2014, 2015 Adrian Leong (cheeky4n6monkey@gmail.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 #
 # You can view the GNU General Public License at <http://www.gnu.org/licenses/>
 
-# store.vol CallHistory record structure
+# "Phone" file CallHistory record structure
 # [?][Flag][0x8 bytes][Start FILETIME][Stop FILETIME][0x7 or 0xF or 0x13 bytes][ID][0x14 bytes][Phone1][1 byte][Name1][1 byte][Name2][1 byte][Phone2][1 byte][GUID]
 #
 # Flag value: 0x00 = Outgoing, 0x01 = Incoming, 0x02 = Missed
@@ -42,6 +42,8 @@
 # v2014-08-16 Adjusted for variable length ID fields and added Flag extraction
 # v2014-08-22 Experimental version that searches for stop timestamps for a given range offset
 # v2014-10-05 Renamed script from "win8callhistory-ex.py" to "wp8-callhistory.py"
+# v2015-07-12 Changed script to search for hex strings in chunks of CHUNK_SIZE rather than in one big read 
+#            (makes it quicker when running against whole .bin files). Thanks to Boss Rob :)
 
 import codecs
 import sys
@@ -49,8 +51,12 @@ import struct
 import datetime
 import string
 from optparse import OptionParser
+import re
+import os
 
-version_string = "wp8-callhistory v2014-10-05"
+version_string = "wp8-callhistory v2014-07-12"
+CHUNK_SIZE = 2000000000 # max value of CHUNK_SIZE + DELTA is 2147483647 (C long limit with Python 2)
+DELTA = 1000 # read this extra bit to catch any hits crossing chunk boundaries. Should be AT LEAST max size of record being searched for.
 
 # Read in 8 byte MS FILETIME (number of 100 ns since 1 Jan 1601) and 
 # Returns equivalent unix epoch offset or 0 on error
@@ -78,14 +84,13 @@ def read_filetime(f):
     unixtime = (mstime - 116444736000000000) // 10000000
     return unixtime
 
-# Find all indices of a substring in a given string (Python recipe) 
-# From http://code.activestate.com/recipes/499314-find-all-indices-of-a-substring-in-a-given-string/
-def all_indices(bigstring, substring, listindex=[], offset=0):
-    i = bigstring.find(substring, offset)
-    while i >= 0:
-        listindex.append(i)
-        i = bigstring.find(substring, i + 1)
-
+# Find all indices of the "pattern" regular expression in a given string (using regex)
+# Where pattern is a compiled Python re pattern object (ie the output of "re.compile")
+def regsearch(bigstring, pattern, listindex=[]):
+    hitsit = pattern.finditer(bigstring)
+    for it in hitsit:
+        # iterators only last for one shot so we capture the offsets to a list
+        listindex.append(it.start())
     return listindex
 
 # Extract a Unicode null terminated string given file. 
@@ -174,6 +179,48 @@ def find_timestamp(f, maxoffset, minoffset):
     # if we get here, we haven't found a valid timestamp, so return 0
     return 0
 
+# Searches chunks of a file (using RE) and returns file offsets of any hits.
+# Intended for searching of large files where we cant read the whole thing into memory
+# This function calls the "regsearch" search method
+def sliceNsearchRE(fd, chunksize, delta, term):
+    final_hitlist = [] # list of file offsets which contain the search term
+    pattern = re.compile(term, re.DOTALL) # should only really call this once at start, if same substring.
+    stats = os.fstat(fd.fileno())
+    #print("sliceNsearchRE Input file " + filename + " is " + str(stats.st_size) + " bytes\n")
+    begin_chunk = 0
+
+    # Handle if filesize is less than CHUNK_SIZE (eg Phone file instead of image.bin)
+    # Should be able to read whole file in 1 chunk 
+    if (chunksize >= stats.st_size):
+        fd.seek(begin_chunk)
+        raw = fd.read()
+        final_hitlist = regsearch(raw, pattern, [])
+        #print(str(len(final_hitlist)) + " hits found in 1 chunk for " + str(term))
+    else:
+        # Filesize is greater than 1 chunk, need to loop thru
+        while ((begin_chunk + chunksize) <= stats.st_size) :
+            chunk_size_to_read = chunksize + delta
+            if ((chunk_size_to_read + begin_chunk) > stats.st_size):
+                chunk_size_to_read = stats.st_size - begin_chunk
+            #print("seeking " + str(begin_chunk) + " with size = " + str(chunk_size_to_read))
+            fd.seek(begin_chunk)
+            rawchunk = fd.read(chunk_size_to_read)
+            subhits = regsearch(rawchunk, pattern, [])
+            #print(str(len(subhits)) + " hits found at " + str(subhits))
+            # Items in subhits will be offsets relative to the start of the rawchunk (not relative to the file)
+            # Need to adjust offsets ...
+            for hit in subhits :
+                if (hit < chunksize) :
+                    final_hitlist.append(begin_chunk + hit)
+                    #print("adding " + str(begin_chunk + hit) + " to list")
+                elif (hit >= chunksize) :
+                    #print("ignoring " + str(begin_chunk + hit) + " to list")
+                    break # don't care if we get here because hit should be processed in next chunk
+                    # subhits can start at index 0 so possible hit offsets are 0 to chunksize-1 inclusive
+            begin_chunk += chunksize
+    #print("final_hitlist = " + str(final_hitlist))
+    return(final_hitlist)
+
 # Main
 print "Running " + version_string + "\n"
 usage = " %prog -f inputfile -o outputfile"
@@ -201,27 +248,25 @@ if (options.tsvfile == None) :
     print "\nOutput filename incorrectly specified!"
     exit(-1)
 
-# Open store.vol for unicode encoded text reads
+# Open "Phone" file for unicode encoded text reads
 try:
 	funi = codecs.open(options.filename, encoding="utf-16-le", mode="r")
 except:
     print ("Input File Not Found (unicode attempt)")
     exit(-1)
 
-# Open store.vol for binary byte ops (eg timestamps)
+# Open "Phone" file for binary byte ops (eg timestamps)
 try:
 	fb = open(options.filename, "rb")
 except:
     print ("Input File Not Found (binary attempt)")
     exit(-1)
 
-# read file into one big BINARY string
-filestring = fb.read()
-# search the big file string for the hex equivalent of the GUID which marks CallHistory records
+# search the file chunks for the hex equivalent of the GUID which marks CallHistory records
 # GUID is "{B1776703-738E-437D-B891-44555CEB6669}" in hex
 GUID = "\x7b\x00\x42\x00\x31\x00\x37\x00\x37\x00\x36\x00\x37\x00\x30\x00\x33\x00\x2d\x00\x37\x00\x33\x00\x38\x00\x45\x00\x2d\x00\x34\x00\x33\x00\x37\x00\x44\x00\x2d\x00\x42\x00\x38\x00\x39\x00\x31\x00\x2d\x00\x34\x00\x34\x00\x35\x00\x35\x00\x35\x00\x43\x00\x45\x00\x42\x00\x36\x00\x36\x00\x36\x00\x39\x00\x7d\x00"
 #print GUID
-hits = all_indices(filestring, GUID, [])
+hits = sliceNsearchRE(fb, CHUNK_SIZE, DELTA, GUID)
 #print "CallHistory hits = " + str(len(hits))
 
 # Dict for storing results (keyed by offset)
