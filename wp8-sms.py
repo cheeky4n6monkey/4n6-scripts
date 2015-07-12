@@ -10,7 +10,7 @@
 # WARNING: This program is provided "as-is" and has been tested with 2 types of Windows Phone 8.0 (Nokia Lumia 520, HTC PM23300)
 # See http://cheeky4n6monkey.blogspot.com/ for further details.
 
-# Copyright (C) 2014 Adrian Leong (cheeky4n6monkey@gmail.com)
+# Copyright (C) 2014, 2015 Adrian Leong (cheeky4n6monkey@gmail.com)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -102,6 +102,10 @@ v2015-07-10:
 - Changed script to search for hex strings in chunks of CHUNK_SIZE rather than in one big read 
 (makes it quicker when running against whole .bin files). Thanks to Boss Rob :)
 
+v2015-07-12:
+- Removed "all_indices" function which was commented out in previous version
+- Adjusted some comments
+
 """
 
 import codecs
@@ -113,7 +117,7 @@ from optparse import OptionParser
 import re
 import os
 
-version_string = "wp8-sms.py v2015-07-10"
+version_string = "wp8-sms.py v2015-07-12"
 CHUNK_SIZE = 2000000000 # max value of CHUNK_SIZE + DELTA is 2147483647 (C long limit with Python 2)
 DELTA = 1000 # read this extra bit to catch any hits crossing chunk boundaries. Should be AT LEAST max size of record being searched for.
 
@@ -176,16 +180,6 @@ def read_filetime(f):
     # Function filetime_to_unix_time(filetime)
     unixtime = (mstime - 116444736000000000) // 10000000
     return unixtime
-
-# DEPRACATED: Find all indices of a substring in a given string (Python recipe) 
-# From http://code.activestate.com/recipes/499314-find-all-indices-of-a-substring-in-a-given-string/
-#def all_indices(bigstring, substring, listindex=[], offset=0):
-#    i = bigstring.find(substring, offset)
-#    while i >= 0:
-#        listindex.append(i)
-#        i = bigstring.find(substring, i + 1)
-#
-#    return listindex
 
 # Find all indices of the "pattern" regular expression in a given string (using regex)
 # Where pattern is a compiled Python re pattern object (ie the output of "re.compile")
@@ -325,7 +319,6 @@ except:
     print ("Input File Not Found (binary attempt)")
     exit(-1)
 
-# read file into one big BINARY string
 # search the file chunks for the hex equivalent of "SMStext" which marks SMS Text content (ie Area 1)
 substring1 = "\x53\x00\x4d\x00\x53\x00\x74\x00\x65\x00\x78\x00\x74\x00\x00\x00" #ie "SMStext"
 hits = sliceNsearchRE(fb, CHUNK_SIZE, DELTA, substring1)
@@ -335,7 +328,6 @@ hits = sliceNsearchRE(fb, CHUNK_SIZE, DELTA, substring1)
 # this will include SMStext hits so we need to some de-duping afterwards
 substring2 = "\x53\x00\x4d\x00\x53\x00\x00\x00" # ie "SMS"
 smshits = sliceNsearchRE(fb, CHUNK_SIZE, DELTA, substring2)
-#smshits = all_indices(filestring, substring2, [])
 #print "SMS hits = " + str(len(smshits)) + " smshits"
 
 # Filter smshits further (the hits above will include some false positives eg "SMStext")
