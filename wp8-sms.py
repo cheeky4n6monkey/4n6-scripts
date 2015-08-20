@@ -106,6 +106,11 @@ v2015-07-12:
 - Removed "all_indices" function which was commented out in previous version
 - Adjusted some comments
 
+v2015-08-19:
+- Fixed bug in chunking code where it was not processing the last chunk properly
+- Adjusted DELTA to cater for a larger max size record
+- Adjusted timestamp search max offset for received SMS
+
 """
 
 import codecs
@@ -116,10 +121,11 @@ import string
 from optparse import OptionParser
 import re
 import os
+import math
 
-version_string = "wp8-sms.py v2015-07-12"
+version_string = "wp8-sms.py v2015-08-19"
 CHUNK_SIZE = 2000000000 # max value of CHUNK_SIZE + DELTA is 2147483647 (C long limit with Python 2)
-DELTA = 1000 # read this extra bit to catch any hits crossing chunk boundaries. Should be AT LEAST max size of record being searched for.
+DELTA = 1100 # read this extra bit to catch any hits crossing chunk boundaries. Should be AT LEAST max size of record being searched for.
 
 # Read in unicode chars one at a time until a null char ie "0x00 0x00"
 # Returns empty string on error otherwise it filters out return/newlines and returns the string read
@@ -242,8 +248,9 @@ def sliceNsearchRE(fd, chunksize, delta, term):
     final_hitlist = [] # list of file offsets which contain the search term
     pattern = re.compile(term, re.DOTALL) # should only really call this once at start, if same substring.
     stats = os.fstat(fd.fileno())
-    #print("sliceNsearchRE Input file " + filename + " is " + str(stats.st_size) + " bytes\n")
+    #print("sliceNsearchRE Input file " + " is " + str(stats.st_size) + " bytes\n")
     begin_chunk = 0
+    #print("chunksize = " + str(chunksize))
 
     # Handle if filesize is less than CHUNK_SIZE (eg store.vol instead of image.bin)
     # Should be able to read whole file in 1 chunk 
@@ -254,10 +261,12 @@ def sliceNsearchRE(fd, chunksize, delta, term):
         #print(str(len(final_hitlist)) + " hits found in 1 chunk for " + str(term))
     else:
         # Filesize is greater than 1 chunk, need to loop thru
-        while ((begin_chunk + chunksize) <= stats.st_size) :
-            chunk_size_to_read = chunksize + delta
+        numchunks = int(math.ceil(float(stats.st_size) / chunksize))
+        #print("numchunks required = " + str(numchunks))
+        chunk_size_to_read = chunksize + delta
+        for chunknum in range(numchunks):
             if ((chunk_size_to_read + begin_chunk) > stats.st_size):
-                chunk_size_to_read = stats.st_size - begin_chunk
+                chunk_size_to_read = stats.st_size - begin_chunk # last chunk only gets until end of file
             #print("seeking " + str(begin_chunk) + " with size = " + str(chunk_size_to_read))
             fd.seek(begin_chunk)
             rawchunk = fd.read(chunk_size_to_read)
@@ -505,8 +514,9 @@ for hit in hits:
         # Add in some tolerance and we will use 0xBD (189 dec) for our min offset between FILETIME2 and "SMStext"
         fb.seek(hit)
         #timeval = find_timestamp(fb, 0xFA, 0xBD)
-        timeval = find_timestamp(fb, 0xFA, 0x9B) # Based on 30AUG DUB data, change the min offset to 0xB8 - 5
+        #timeval = find_timestamp(fb, 0xFA, 0x9B) # Based on 30AUG DUB data, change the min offset to 0xB8 - 5
         # Based on MPD log file data, changed min offset to 0x9B
+        timeval = find_timestamp(fb, 0x120, 0x9B) # Based on Garda test data changed max offset to 0x120
 
     timestring = ""
     if (timeval != 0):
