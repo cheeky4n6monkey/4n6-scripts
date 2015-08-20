@@ -66,6 +66,8 @@
 # v2014-10-05 Renamed script from "win8contacts.py" to "wp8-contacts.py"
 # v2015-07-12 Changed script to search for hex strings in chunks of CHUNK_SIZE rather than in one big read 
 #            (makes it quicker when running against whole .bin files). Thanks to Boss Rob :)
+# v2015-08-19 Fixed bug in chunking code where it was not processing the last chunk properly
+#
 
 import codecs
 import os
@@ -74,8 +76,9 @@ import string
 from optparse import OptionParser
 import re
 import os
+import math
 
-version_string = "wp8-contacts.py v2015-07-12"
+version_string = "wp8-contacts.py v2015-08-19"
 CHUNK_SIZE = 2000000000 # max value of CHUNK_SIZE + DELTA is 2147483647 (C long limit with Python 2)
 DELTA = 1000 # read this extra bit to catch any hits crossing chunk boundaries. Should be AT LEAST max size of record being searched for.
 
@@ -142,8 +145,10 @@ def sliceNsearchRE(fd, chunksize, delta, term):
         #print(str(len(final_hitlist)) + " hits found in 1 chunk for " + str(term))
     else:
         # Filesize is greater than 1 chunk, need to loop thru
-        while ((begin_chunk + chunksize) <= stats.st_size) :
-            chunk_size_to_read = chunksize + delta
+        numchunks = int(math.ceil(float(stats.st_size) / chunksize))
+        #print("numchunks required = " + str(numchunks))
+        chunk_size_to_read = chunksize + delta
+        for chunknum in range(numchunks):
             if ((chunk_size_to_read + begin_chunk) > stats.st_size):
                 chunk_size_to_read = stats.st_size - begin_chunk
             #print("seeking " + str(begin_chunk) + " with size = " + str(chunk_size_to_read))
