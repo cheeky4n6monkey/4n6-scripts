@@ -28,6 +28,8 @@
 # See: https://docs.python.org/2/library/stdtypes.html#numeric-types-int-float-long-complex
 # Python 3 apparently does not have this limitation.
 #
+# v2015-08-19 = Fixed bug in chunking code where it was not processing the last chunk properly
+#
 
 import os
 import sys
@@ -35,6 +37,7 @@ import string
 import re
 import argparse
 import binascii
+import math
 
 # Find all indices of a substring in a given string (using string.find) 
 # From http://code.activestate.com/recipes/499314-find-all-indices-of-a-substring-in-a-given-string/
@@ -80,8 +83,10 @@ def sliceNsearch(filename, chunksize, delta, term):
         #print(str(len(final_hitlist)) + " hits found in 1 chunk for " + str(term))
     else:
         # Filesize is greater than 1 chunk, need to loop thru
-        while ((begin_chunk + chunksize) <= stats.st_size) :
-            chunk_size_to_read = chunksize + delta # read a bit more than the chunk size in case a search hit crosses chunk boundaries
+        numchunks = int(math.ceil(float(stats.st_size) / chunksize))
+        #print("numchunks required = " + str(numchunks))
+        chunk_size_to_read = chunksize + delta # read a bit more than the chunk size in case a search hit crosses chunk boundaries
+        for chunknum in range(numchunks):
             if ((chunk_size_to_read + begin_chunk) > stats.st_size):
                 chunk_size_to_read = stats.st_size - begin_chunk # reads rest of file at EOF and/or whole file if chunk is greater than filesize
             #print("seeking " + str(begin_chunk) + " with size = " + str(chunk_size_to_read))
@@ -132,8 +137,10 @@ def sliceNsearchRE(filename, chunksize, delta, term):
         #print(str(len(final_hitlist)) + " hits found in 1 chunk for " + str(term))
     else:
         # Filesize is greater than 1 chunk, need to loop thru
-        while ((begin_chunk + chunksize) <= stats.st_size) :
-            chunk_size_to_read = chunksize + delta
+        numchunks = int(math.ceil(float(stats.st_size) / chunksize))
+        #print("numchunks required = " + str(numchunks))
+        chunk_size_to_read = chunksize + delta # read a bit more than the chunk size in case a search hit crosses chunk boundaries
+        for chunknum in range(numchunks):
             if ((chunk_size_to_read + begin_chunk) > stats.st_size):
                 chunk_size_to_read = stats.st_size - begin_chunk
             #print("seeking " + str(begin_chunk) + " with size = " + str(chunk_size_to_read))
@@ -188,7 +195,7 @@ def wholereadRE(filename, substring):
     return hits
 
 # Main
-version_string = "chunkymonkey.py v2015-07-10"
+version_string = "chunkymonkey.py v2015-08-19"
 print("Running " + version_string + "\n")
 
 parser = argparse.ArgumentParser(description='Helps find optimal chunk sizes when searching large binary files for a known hex string')
