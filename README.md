@@ -4,6 +4,7 @@
 Forensic Scripts
 
 Currently this project contains assorted Perl/Python scripts from http://cheeky4n6monkey.blogspot.com/
+In December 2021, an attempted cleanup was done - scripts were sorted into folders by OS, Perl language or "utilities" (if you're not sure where a Python script moved to, its probably here).
 
 The scripts were initially written for/tested on SANS SIFT Virtual Machines. 
 MOST Perl scripts should also run with ActiveState Perl on Windows but ALL have been tested/run on SANS SIFT (v2). 
