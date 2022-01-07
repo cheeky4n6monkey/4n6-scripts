@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-# samsung_gallery3d_trash_parser.py = Python script to parse a Samsung com.sec.android.gallery3d's (v11) local.db trash table
+# samsung_gallery3d_trash_parser_v10.py = Python script to parse a Samsung com.sec.android.gallery3d's (v10) local.db trash table
 #
 # Based on research by Michael Lacombe (iacismikel@gmail.com)
 #
@@ -24,12 +24,12 @@ import re
 import datetime
 import json
 
-version_string = "samsung_gallery3d_trash_parser.py v2021-11-12"
+version_string = "samsung_gallery3d_trash_parser_v10.py v2021-11-12"
 
 
 def main():
     usagetxt = " %(prog)s [-d inputfile -o outputfile]"
-    parser = argparse.ArgumentParser(description='Extracts/parses data from com.sec.android.gallery3d\'s (v11) local.db\'s trash table to output TSV file', usage=usagetxt)
+    parser = argparse.ArgumentParser(description='Extracts/parses data from com.sec.android.gallery3d\'s (v10) local.db\'s trash table to output TSV file', usage=usagetxt)
     parser.add_argument("-d", dest="database", action="store", required=True, help='SQLite DB filename i.e. local.db')
     parser.add_argument("-o", dest="output", action="store", required=True, help='Output file name for Tab-Separated-Value report')
 
