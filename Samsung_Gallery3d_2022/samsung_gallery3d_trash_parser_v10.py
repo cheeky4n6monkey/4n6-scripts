@@ -13,7 +13,7 @@
 # Developed/tested on Ubuntu 20x64 running Python 3.8 using sample data provided by Michael Lacombe.
 #
 # Usage Example:
-# python samsung_gallery3d_trash_parser.py -d local.db -o output.TSV
+# python samsung_gallery3d_trash_parser_v10.py -d local.db -o output.TSV
 #
 
 import argparse
